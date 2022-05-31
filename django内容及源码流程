@@ -1,0 +1,1035 @@
+检查Django环境并使用django-admin命令创建Django项目
+django-admin --version
+django-admin startproject hellodjango
+python manage.py runserver
+python manage.py inspectdb > 应用名字/model.py 将表转化为模型类
+python manage.py migrate --> admin所需的表迁移到数据库中
+python manage.py createsuperuser --> 创建账号
+python manage.py makemigrations polls
+python manage.py migrate polls  将模型类迁移成数据库表
+python manage.py clearsessions 清除数据库中的过期sessionid记录
+
+
+中间件：
+    登录认证
+        不在使用装饰器，写中间件
+    权限 
+        当用户登录时获取当前用户的所有权限并放入session，然后再次访问其他页面时，获取当前url并在session中进行匹配，如果没有匹配成功，则在中间件返回无权访问
+    黑名单
+    跨域
+        jsonp： 动态创建一个script标签
+        cores： 设置响应头
+        应用：
+            本地开始前后端分离的时候使用
+
+    ps:
+        django的csrf是如何实现的？ 
+            FBV
+            from django.views.decorators.csrf import csrf_exempt
+            视图函数加上 @csrf_exempt 免认证  @csrf_protect 需认证
+
+            检查是否免认证   process_view
+            去请求体或cookie中获取token 校验
+
+            CBV
+            from django.utils.decorators import method_decorator
+            在dispatch方法上加 @method_decorator(csrf_exempt)
+            或者类上加@method_decorators(csrf_exempt, name="dispatch")
+
+ORM
+    only
+    defer
+    selected_related, 主动做连表查询(1次连表)  连表多性能差
+    prefetch_related, 两次单表查询
+
+    如果数据量比较大，不会使用FK，允许出现数据冗余
+
+
+视图：
+    CBV 基于反射实现根据请求方式不同，执行不同的方法
+    原理：
+        url -- > view方法 --> dispatch方法（反射执行post get..）
+      
+
+配置修改：
+LANGUAGE_CODE = 'zh-hans'
+TIME_ZONE = 'Asia/Chongqing'
+templates：
+    'DIRS': [os.path.join(BASE_DIR, 'templates'), ],
+
+mysql配置：
+    DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'vote',
+        'HOST': 'localhost',
+        'PORT': 3306,
+        'USER': 'hellokitty',
+        'PASSWORD': 'Hellokitty.618',
+        'CHARSET': 'utf8',
+        'TIME_ZONE': 'Asia/chongqing',
+    }
+}
+    init文件下：
+        import pymysql
+        pymysql.install_as_MySQLdb()
+
+
+
+admin注册模型类
+admin.site.register(Subject)
+
+自定义admin页面效果 列表信息  搜索关键字  排序
+class SubjectModelAdmin(admin.ModelAdmin):
+    list_display = ('no', 'name', 'intro', 'is_hot')
+    search_fields = ('name', )
+    ordering = ('no', )
+
+request.method request.POST request.GET 
+
+
+认证：
+    from django.contrib import auth
+    from django.contrib.auth.models import User
+    from django.contrib.auth.decorators import login_required
+
+    user = auth.authenticate(username=username, password=password)
+    
+    auth.login(request, user) # 将登录的用户封装到request.user中
+
+    # 创建用户
+    user_obj = User.objects.create_user(username="alex", password="alexdsb")
+    # 检查密码
+    ret = user_obj.check_password("alex123")
+    print(ret)
+    # 修改密码
+    user_obj.setpassword("alex4")
+
+    扩展auth表：
+        from django.contrib.auth.models import User, AbstractUser
+        class UserInfo(AbstractUser):
+            phone = models.CharField(max_length=32)
+            addr = models.CharField(max_length=32)
+
+
+        引用Django自带的User表，继承使用时需要设置
+        AUTH_USER_MODEL = "app名.UserInfo"
+
+
+
+Django模板语言
+    {{ name }}  变量
+
+    {% for i in book_list %}  
+        {{ forloop.counter }}
+        {{ forloop.last }}
+        {{ i }}
+    {% endfor %}
+    
+    for循环可用参数：
+        forloop.counter 当前循环的索引值(从1开始)
+        forloop.counter0 索引值从0开始
+        forloop.revcounter  当前循环的倒序索引值(从1结束)
+        forloop.revcounter0 当前循环的倒叙索引值从0结束
+        forloop.first  当前循环是不是第一次循环
+        forloop.last  是不是最后一次循环
+        forloop.parentloop  本层循环的外层循环
+
+    for empty
+    {% for user in user_list %}
+        pass
+    {% empty %}
+        pass
+    {% endfor %}
+
+
+    {% if user_list %}
+        pass
+    {% elif black_list %}
+        pass
+    {% else %}
+        pass
+    {% endif %}
+
+    with
+    {{ with name = name_list.1.1}}
+        {% name %}
+    {{ endwith }}
+
+    {# 注释 #}
+
+    filter:
+        {{ value|default:"默认值" }} 没传值变为默认值
+        {{ value|length }} 传入值的长度
+        {{ value|filesizeformat }} 值的文件尺寸 MB KB bytes
+        {{ value|slice:"1:-1" }} 切片
+        {{ value|date:"Y-m-d H:i:s"}} 格式化时间
+        {{ value|safe }}  安全不必转义
+        {{ value|truncatechars:20}}  字符串超过长度20替换...
+    
+    自定义filter: 最多只能接收两个参数
+        from django import template
+        register = template.Library()
+        @register.filter(name="")
+        def function(arg1, arg2)
+
+        {% load myfilter %}
+        {{ name(arg1)|"":arg2 }}
+    
+    模板继承：
+        {% extends 'base.html' %}
+
+        {% block page-main %}
+            占位 替换模板指定的位置
+        {% endblock %}
+
+    {% include 'html文件' %} 导入html文件
+
+    在settings文件里找静态文件夹名字拼接到具体的文件路径
+    {% load static %} 
+    <link href="{% static 'bootstrap/css/bootstrap.min.css' as bs %}">
+    <img src="{{ bs }}"></img>
+
+    使用get_static_prefix  获取静态文件前缀
+    {% load static %}
+    <img src="{% get_static_prefix %}images/hi.jpg" alt='Hi'></img>
+
+    在app下面新建的templatetags文件夹(python包) 新建文件
+    自定义simpletag  可以接收多个参数
+    register = template.Library()
+    @register.simple_tag(name="yimi")
+
+    {% load mysimpletag %}
+    {% yimi 'asdsa' 'fagege' ' gegas' %}
+
+
+    自定义inclusion_tag返回页面片段 + 参数设置
+    @register.inclusion_tag('result.html')
+    def show_results(n): 
+        pass
+        return {'data': data}
+
+    result.html:
+    {% for choice in data %}
+        <li> {{ choice }}</li>
+    {% endfor %}
+
+    base.html:
+    {% show_results 100 %}
+
+
+django视图：
+
+    class AddPublisherView(View):
+        def get(self, request):
+            pass
+        
+        def post(self, request):
+            pass
+
+    url修改：path('teachers/', ShowTeacherView.as_view())
+
+
+    request对象
+        path_info 返回用户访问url 不包含域名 参数
+        method 请求使用的http方法 大写
+        GET 包含所有HTTP GET参数的类字典对象
+        POST 包含所有HTTP POST 参数的类字典对象
+        FILES 上传文件 
+        body 请求体，byte类型， request POST的数据就是从body里面提取到
+
+    上传文件 form标签 enctype属性
+        <form action="/upload/" method="post" enctype="multipart/form-data">
+            <input type="file" name="upload_file">
+            <input type="submit" value="开始上传文件">
+        </form>
+
+        def upload(request):
+            if request.method == 'POST':
+                filename = request.FILES['upload_file'].name
+                with open(filename, 'wb') as f:
+                    # 从文件里一点一点读
+                   for chunk in request.FILES['upload_file'].chunks():
+                        f.write(chunk)
+                return HttpResponse('上传成功')
+    
+    JsonResponse对象  默认传递字典类型 非字典需要设置safe
+        response = JsonResponse({'foo': 'bar'})
+        print(response.content)  获取json对象 {'foo': 'bar'}
+
+        response = JsonResponse([1,2,3], safe=False)
+
+
+django路由系统：
+    分组匹配
+    urlpatterns = [
+        url(r'^blog/$', views.page),
+        url(r'^blog/page(?P<num>[0-9]+)/$', views.page),
+    ]
+
+    def page(request, num="1"):
+        pass
+
+    反向解析url
+        path('json99/', views.json_test, name="json_test")
+        path('/car/, include(urls, namespace= "car"))
+
+        <a href={% url 'json_test' 参数 %}>点我</a>
+        <a href={% url 'car:json_test' 10 %}>点我</a>
+
+        from django.urls import reverse
+        reverse("json_test"， kwargs={参数})  ---> 得到具体的url路径
+
+ORM
+    常用字段：
+        AutoField 自增  必须添加primary_key=True
+        CharField    varchar(xx)  max_length
+        ForeignKey   外键    to
+        ManyToManyField  多对多关联
+        IntegerField   整型
+        DataTimeField  日期类型   auto_now=True 每次更新都更新最新时间
+
+    字段参数：
+        null  unique  db_index  default  on_delete  db_constraint
+
+    元信息：
+        db_table  index_together  unique_together  ordering
+
+
+queryset = [{}, {}]  models.User.objects.all().values('id', 'name')
+queryset = [(), ()]  models.User.objects.all().value_list('id', 'name')
+queryset = [obj, obj] 
+    result = models.User.objects.all().only('id', 'name')  # 只取某几列
+    for item in result:
+        print(item.id, item.name)
+    result = models.User.objects.all().defer('id', 'name')  # 不取某几列
+
+
+
+ret = models.Person.objects.all().first()/last() 
+ret = models.Person.objects.get(name="小黑")
+ret = models.Person.objects.filter(id=100) 不存在返回空的QuerySet不报错
+ret = models.Person.objects.filter(id=1)[0]
+ret = models.Person.objects.exclude(id=1)  排除id=1的
+ret = models.Person.objects.all().values("birthday") Query列表套字典
+ret = models.Person.objects.all().order_by('birthday').reverse() 反转
+ret = models.Person.objects.exists() 判断表里是否有数据
+
+双下划线方法
+ret = models.Person.objects.filter(id__gt=1, id__lt=4)
+ret = models.Person.objects.filter(id__in=[1,3,5])
+ret = models.Person.objects.exclude(id__in=[1,2,3])
+ret = models.Person.objects.filter(name__contains='小') 
+icontains 忽略大小写
+ret = models.Person.objects.filter(id__range=[1,3])
+
+一对一：
+    当一张表的某一些字段查询的比较频繁，另外一些字段查询的不是特别频繁，
+    把不怎么常用的字段，单独拿出来做成一张表，然后用过一对一关联起来
+    OneToOneField
+
+多对多： 第三张表没有额外字段 用第一种  有的话用第三种
+    1. 利用ManyToManyField让orm自动创建第三张表
+    2. 自己创建第三张表 用外键进行连接
+    3. 自己创建第三张表  并用ManyToManyField 关联
+    ManyToManyField(to="Book", through="author2book", through_fields=("author", "book"))
+
+
+
+外键的跨表查询
+publisher_obj = models.Book.objects.all().first().publisher
+name = models.Book.objects.filter(id=1).values("publisher_name")
+反向查询 表名_set  或者设置外键时加 related_name = 'books'
+ret = models.Publisher.objects.first().book_set.all() /books.all()
+
+ 多对多查询：
+    create
+    author_obj = models.Author.objects.first()
+    author_obj.books.create(title='金老板自传',publisher_id=2)
+    
+    add
+    book_obj =  models.Book.objects.get(id=4)
+    author_obj.books.add(book_obj)
+
+    多个添加
+    book_objs = models.Book.objects.filter(id__gt=5)
+    author_obj.books.add(*book_objs)
+
+    直接添加id
+    authro_obj.books.add(9)
+
+    remove
+    book_obj = models.Book.objects.get(title='跟着金老板学潜艇')
+    author_obj.books.remove(book_obj)
+
+    author_obj.books.remove(8)
+
+    clear
+    jing_obj = models.Author.objects.get(id=2)
+    jing_obj.books.clear()
+
+聚合查询 aggregate
+    from django.db.models import Avg, Sum, Max, Min, Count
+    ret = models.Book.objects.all().aggregate(price_avg=Avg("price")
+    返回字典 {"price_avg": 166.3775}
+
+分组   annotate
+    ret = models.Book.objects.all().annotate(author_num = Count("author"))
+    for book in ret:
+        print(book)
+
+    ret = models.Book.objects.all().annotate(author_num=Count("author")).filter(author_num__gt=1)
+
+    ret = models.Author.objects.all().annotate(price_sum=("books__price")).values_list("name", "price_sum")
+
+    models.employee.objects.all().values("id", "dept")
+    models.employee.objects.values("dept").annocate(avg=AVG("salary")).values("dept", "avg")
+
+    models.dept.objects.annotate(avg=AVG("employee__salary")).values("name", "avg")
+
+
+F查询  两个字段作比较
+    from django.db.models import F
+    ret = models.Book.objects.filter(kucun__gt=F("maichu"))
+
+    models.Book.objects.update(miachu=F("maichu")*3)
+
+    from django.db.models.functions import Concat
+    from django.db.models import Value
+
+    models.Book.objects.update(title=Concat(F("title"),value("第一版")))
+
+Q查询  先写Q查询  或者条件
+    ret = models.Book.objects.filter(maichu__gt=1000, price__lt=100)
+    ret = models.Book.objects.filter(Q(maichu__gt=1000) | Q(price__lt=100), title__contains="金老板")
+
+    Book.objects.filter(Q(title="yuan")|Q(price=123))
+    --> q = Q()
+        q.connector = "or"
+        q.children.append(("title","yuan"))
+        q.children.append(("price",123))
+        Book.objects.filter(q)
+
+事务  原子性
+    from django.db import transaction
+    with transaction.atomic():
+        pass
+
+QuerySet 性能优化  
+连表查询时  select_related()  主要一对一和多对一关系 
+进行连表操作 一次性获取全部
+models.employee2.objects.select_related().values("name", "dept__name")
+
+一对多和多对多关系  prefetch_related()
+分别查询表 然后合并实现连表
+models.author.objects.prefetch_related().values("name", "books__title")
+
+批量插入：
+    bulk_create()
+    objs = [models.Book(title="沙河{}".format(i)) for i in range(100)]
+    models.Book.objects.bulk_create(objs, 10) 10个提交一次
+
+csrf
+    跨站请求伪造 
+    settings 中MIDDLEWARE csrf中间件
+        1. 在render返回页面的时候，在页面中塞了一个隐藏的input标签
+        key value
+        2. 当你提交POST数据的时候，它帮你做校验，如果校验不通过就拒绝这次请求
+
+    {% csrf token %}  form表单中写
+
+
+分页：
+    books/?page=1
+    def books(request):
+        page_num = int(request.GET.get("page"))
+        data_start = (page_num-1)*10  // 数据头
+        data_end = (page_num)*10  // 数据尾
+        per_page = 10  
+        max_page = 11  // 每页显示最大页数
+        half_max_page = max_page // 2   // 中间位置
+
+        tatal_count = models.Book.objects.all().count()
+        total_page, more = divmod(total_count, per_page)
+        if more:
+            total_page += 1
+
+        page_start = page_num - half_max_page
+        page_end = page_num + half_max_page
+        if page_start <= 1:
+            page_start = 1
+            page_end  = max_page
+        if page_end >= total_page:
+            page_end = total_page
+            page_start = total_page - max_page + 1
+
+
+        all_book = models.Book.objects.all()[data_start:data_end]
+
+        html_str_list = []
+        html_str_list.append(<li><a href="/books/?page=1">第一页</a></li>") // 添加首页
+
+        for i in range(page_start, page_end+1):
+            tmp = "<li><a href="/books/?page={}">{}</a></li>".format(i)
+            html_str_list.append(tmp)
+
+        html_str_list.append(<li><a href="/books/?page={}">最后一页</a></li>".format(total_page))  // 添加尾页
+
+
+        page_html = "".join(html_str_list)
+        return render(request, "books.html", {"books": all_book, "page_html": page_html})
+
+
+cookie:  默认关闭浏览器失效
+
+    ret = request.COOKIES.get("is_login", 0)
+    ret = request.get_signed_cookie("is_login", default="0", salt="s12nb")
+
+    设置cooie 针对响应对象
+    ret = redirect("/login/")
+    ret.set_signed_cookie("is_login", "1", salt="s12nb")
+    ret.delete_cookie("is_login")
+
+    from functools import wraps
+    登录校验：
+    def check_login(func):
+        @wraps(func)  # 装饰器修复技术
+        def inner(request, *args, **kwargs):
+            ret = request.get_signed_cookie("is_login", default="0", salt="s12")
+            if ret == "1":
+                return func(request, *args, **kwargs)
+            else:
+                # 获取当前访问的url
+                next_url = request.path_info
+                # next_url = request.get_full_info() 获取整个url
+                return redirect("/login/?next={}".format(next_url))
+
+        return inner
+
+session
+    request.session["is_login"] = "1"
+    request.session.setdefault('is_login', "1") 存在不设置
+    ret = request.session.get("is_login")
+    del request.session['is_login']
+
+    删除当前会话所有的session数据
+    request.session.delete()
+
+    删除当前的会话session并删除会话的cookie
+    request.session.flush()
+
+    将所有session失效日期小于当前日期的数据删除
+    request.session.clear_expired()
+
+    设置超时时间
+    request.session.set_expiry(value)
+
+    settings : 是否每次请求包保存session
+        SESSION_SAVE_EVERY_REQUEST = False 
+    
+CBV装饰器：
+    from django.utils.decorators import method_decorator
+
+    class UserInfo(View):
+        @method_decorator(check_login)
+        def get(self, request):
+            return render(request, "userinfo.html")
+    
+
+json:  属性名必须双引号
+    json.dumps() 字典对象 --> 字符串
+    json.loads() 字符串 --> 字典对象
+
+ajax:
+    jquery实现ajax：
+
+    $("#b1").on("click", function(){
+        var i1 = $("#i1").val()
+        var i2 = $("#i2").val()
+        $.ajax({
+            url: "/ajax_add/",
+            method: "get",
+            data: {"i1": i1, "i2": i2},
+            success: function(arg){
+                $("#i3").val(arg);
+            }
+        })
+    })
+    
+    ajax POST请求
+
+    $("#b1").on("click", function(){
+        var i1 = $("#i1").val()
+        var i2 = $("#i2").val()
+        var csrfToken = $("[name='csrfmiddlewaretoken']").val();
+        $.ajax({
+            url: "/ajax_add/",
+            method: "post",
+            dataType: "json",
+            tranditional: true,  列表不需转化
+            data: {"i1": i1, "i2": i2, "csrfmiddlewaretoken": csrfToken, 'sb':[1,2,3]},
+            success: function(arg){
+                $("#i3").val(arg);
+            }
+        })
+    })
+
+
+序列化：
+    from django.core import serializers
+    ret = Subject.objects.all()
+    s = serializers.serialize("json", ret)
+
+form组件：
+
+    from django import forms
+    class RegForm(forms.Form):
+        name = forms.CharField(max_length=16, label="用户名",
+                            error_messages={
+                                "required": "该字段不能为空",
+                            },
+                            widget=widgets.TextInput,
+                            )
+        pwd = forms.CharField(label="密码", min_length=6, max_length=10,
+                            widget=widgets.PasswordInput(),  # 密码框input
+                            error_messages={
+                                "min_length": "密码不能少于六位",
+                                "max_length": "密码最长十位",
+                            })
+        email = forms.EmailField()
+        gender = forms.ChoiceField(
+            choices=((1, "男"), (2, "女"), (3, "保密")),
+            label="性别",
+            initial=3,  # 默认
+            widget=widgets.RadioSelect(attrs={"class": "c1"}),  # radio单选择框
+        )
+        hobby = forms.ChoiceField(
+            widget=widgets.Select,  # 下拉框选择
+            # widget = widgets.SelectMultiple, 多选
+        )
+        keep = forms.ChoiceField(
+            label="是否记住密码",
+            initial="checked",
+            widget=widgets.CheckboxInput,  # 单勾选框
+            # widget = widgets.CheckboxSelectMultiple, 多选框
+        )
+
+    生成html：
+        实例化一个form对象，传递到模板语言中
+        在目标语言中调用form对象的响应方法和属性
+    三种方式：
+        {{ form_obj.as_p }}
+        单独写
+            {{ form_obj.pwd.label }}
+            {{ form_obj.pwd }}
+
+
+    做校验：
+        form_obj = RegForm(request.POST)
+        form_obj.is_valid()
+    
+    def reg(request):
+    form_obj = RegForm()
+    if request.method == "POST":
+        form_obj = RegForm(request.POST)
+        if form_obj.is_valid():
+            # 校验通过
+            # 把数据存入到数据库
+            # 所有经过校验的数据都保存在form_obj.cleaned_data
+            print(form_obj.cleaned_data)
+            del form_obj.cleaned_data["re_pwd"]
+            Subject.objects.create(**form_obj.cleaned_data)
+            return HttpResponse("注册成功")
+
+    内置的正则校验器
+    from django.core.validator import RegexValidator
+    mobile = forms.CharField(
+        label="手机",
+        validators=[
+            RegexValidator(r'^[0-9]+$', '手机号必须是数字'),
+            RegexValidator(r'^159[0-9]+$', '数字必须以159开头')
+        ],
+        widget=widgets.TextInput(attrs={"class": "form-control"}),
+        error_messages={
+            "required": "该字段不能为空", // 默认提示
+        }
+    )
+
+form_obj.is_valid()源码：
+    full_clean()函数内部：
+        self._errors = ErrorDict()
+        self.cleaned_data={}
+        self._clean_fields()  # for循环每一个字段 分别校验
+        self._clean_form()   # 调用对象的clean()方法，但是默认对象继承的clean()方法啥也没干
+
+        重写父类的clean方法
+            def clean(self):
+                pwd = self.cleaned_data.get("pwd")
+                re_pwd = self.cleaned_data.get("re_pwd")
+                if pwd != re_pwd:
+                    self.add_error("re_pwd", ValidationError("两次密码不一致"))
+                    raise ValidationError("两次密码不一致")
+                return self.cleaned_data
+
+# 通过字符串导入模块
+o = importlib.import_module("xx.oo")
+
+# 由字符串找到函数 方法 类  利用反射
+the_class = getattr(o, "Person")
+p2 = the_class("小黑")
+p2.dream()
+
+
+中间件：
+    wsgi之后，urls.py之前，在全局操作django的请求和响应的模块
+    五个固定的方法：
+        process_request(self, request)
+            执行顺序：
+                按照注册的顺序(在settings.py里面设置中 从上到下)
+            请求从wsgi进入后执行
+            返回值：
+                返回None 继续执行后续的中间件process_request方法
+                返回response 不执行后续的中间件的process_request方法
+
+        process_response(self, request, response)
+            执行顺序：
+                按照注册顺序的倒序(在settings.py里设置，从下到上)
+            请求有响应的时候执行
+            返回值：
+                必须返回一个response对象
+
+        process_view(self, request, view_func, view_args, view_kwargs)
+            # request  浏览器发来的请求对象
+            # view_func  将要执行的视图函数的名字
+            # view_args  将要执行的视图函数的位置参数
+            # view_kwargs  将要执行的视图函数的关键字参数
+
+            执行顺序：
+                从上到下
+            在urls.py中找到对应关系之后，在执行视图函数之前执行
+            返回值：
+                返回None, 继续执行后续的中间件的process_view方法
+                返回response,不执行后续，执行视图函数后接process_response方法
+        
+        process_exception(self, request, exception)
+            执行顺序：
+                按照注册顺序的倒序
+            视图函数执行之后执行
+            返回值：
+                返回None，继续执行后续中间件的process_exception
+                返回response
+
+        process_template_response(self, request, response)
+            执行顺序：
+                按照注册顺序的倒序
+            视图函数执行完，返回render()方法对象之前时执行
+            返回值：
+                返回None， 继续执行后续的process_excpetion
+                返回response
+
+        解决跨域请求 中间件注册
+        class CORSdMiddleware(MiddlewareMixin):
+            def process_response(self, request, response):
+                # 添加响应头
+                # 允许你的域名来获取我的数据
+                response['Access-Control-Allow-Origin'] = '*'  
+                # 允许你携带Content-Type请求头
+                response['Access-Control-Allow-Headers'] = 'Content-Type'
+                # 允许你发送delete，put
+                response['Access-Control-Allow-Methods'] = 'Delete, PUT'
+                
+                return response                
+
+
+contenttype组件：
+    做连表查询的  一张表跟多张表关联  自动创建了表名称表
+
+    from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+    from django.contrib.contenttypes.models import ContentType
+
+
+    class Course(models.Model):
+        title = models.CharField(max_length=32)
+        #  快速反向查询表所有内容
+        price_policy_list = GenericRelation("PricePolicy")
+
+
+    class DegreeCourse(models.Model):
+        title = models.CharField(max_length=32)
+        price_policy_list = GenericRelation("PricePolicy")
+
+
+    class PricePolicy(models.Model):
+        price = models.IntegerField()
+        period = models.IntegerField()
+
+        content_type = models.ForeignKey(ContentType, verbose_name='关联的表的名称')
+        object_id = models.IntegerField(verbose_name="关联表的数据行id")
+        #  帮助快速实现content_type操作
+        content_object = GenericForeignKey('content_type', 'object_id')
+
+
+    obj = DegreeCourse.objects.filter(title="pyhton").first()
+    PricePolicy.objects.create(price=9.9, period=30, content_object=obj)
+
+    course = Course.objects.filter(id=1).first()
+    price_policys = course.price_policy_list.all()
+
+
+
+
+权限组件：
+    rbac 只做权限相关的
+        创建表关系 User   Role   Permission
+        基于admin录入数据
+        登录校验：
+
+            if 登录成功：
+                查询当前登录用户的权限列表注册到session中
+
+        校验权限(中间件)：
+            class ValidPermission(MiddlewareMixin):
+                def process_request(self, request):
+                    current_path = request.path_info
+                    # 检查是否属于白名单
+                    valid_url_list = ["/login/", "/reg/", "/admin/.*"]
+                    for i in valid_url_list:
+                        ret = re.match(i, current_path)
+                        if ret:
+                            return None
+
+                    # 查看权限
+                    permission_list = request.session.get("permission_list", [])
+                    flag = False
+                    for permission in permission_list:
+                        permission = "^%s$" % permission
+                        print(permission)
+                        ret = re.match(permission, current_path)
+                        print(ret)
+                        if ret:
+                            flag = True
+                            break
+                    if not flag:
+                        return HttpResponse("没有访问权限")
+
+ModelForm:
+    class BookForm(ModelForm):
+        class Meta:
+            model = Book
+            fields = "__all__"
+            label = {
+                        "title": "书籍名称",
+                        "price": "价格",
+                    },
+            widgets = {
+                "title": widgets.TextInput(attrs={"class": "form-control"})
+            },
+            error_messages = {
+                "title": {"required": "不能为空"}
+            }
+
+
+    def editbook(request, edit_book_id):
+        edit_book = Book.objects.filter(pk=edit_book_id).first()
+        if request.method == "POST":
+            form = BookForm(request.POST, instance=edit_book)
+            if form.is_valid():
+                form.save()
+                return redirect("/books/")
+
+        form = BookForm(instance=edit_book)
+        return render(request, "edit.html", locals())
+    
+
+跨域：
+    jsonp
+        同源是指： 域名 协议 端口一致
+
+    跨域封装方法：
+            function get_jsonp_data(url){
+                var ele_script = $("<script>");
+                ele_script.attr("src", url)
+                ele_script.attr("id", "jsonp")
+
+                $("body").append(ele_script);
+                $("#jsonp").remove();
+            }
+
+    官方：
+        $(".get_service_1").click(function(){
+        $.ajax({
+            url: "http://127.0.0.1:8000/service/",
+            type:"get",
+            dataType:"jsonp",
+            jsonp:"callbacks",
+            // jsonpCallback:"SayHi"
+            success: function(data){
+                console.log(data);
+            }
+        })
+
+
+    })
+
+    例子  ： 
+    $(".get_service_1").click(function(){
+        $.ajax({
+            url: "http://www.jxntv.cn/data/jmd-jxtv2.html",
+            type:"get",
+            dataType:"jsonp",
+            jsonp:"callbacks",
+            jsonpCallback:"list",
+            success: function(data){
+
+                var html = ""
+                console.log(data.data);
+
+                $.each(data.data, function (index, weekday) {
+                    console.log(weekday);
+                    html += '<p>' + weekday.week + '</p>'
+
+                    $.each(weekday.list, function(j, show){
+                        html += '<p><a href = '+show.link+'>' + show.name + '</a></p>'
+                    })
+                });
+
+                $("body").append(html)
+            }
+        })
+    })
+
+    cors跨域：
+        response = HttpResponse(json.dumps(info))
+        response["Access-Control-Allow-Origin"] = "http://127.0.0.1:8006"    
+        return response
+
+    转义：
+        from django.utils.safestring import mark_safe
+        return mark_safe("<a>编辑</a>")
+
+
+admin:
+    list_display = ["user", "room", "date"]  # 显示列 不能放多对多字段
+    list_display_links = ["room", "user"]  # 跳转列
+    list_filter = ["user", "room"]  # 过滤器 右侧筛选表
+    list_editable = ["room"]  # 可编辑
+    search_fields = ["user"]  # 按照user搜索  用普通字段 模糊查询
+    fields = ["user", "room"]  # 详细页面时，显示的字段
+    exclude = ["user", "room"]  # 不显示的字段
+    readonly_fields = ["user"]  # 只读字段
+    ordering = ["room"]  # 按照字段排序
+
+    # 定义批量操作函数
+    def func(self, request, queryset):
+        print(self, request, queryset)
+        queryset.update(date="2022-12-20")
+
+    func.short_description = "批量初始化"
+    actions = [func, ]  # 批量操作
+
+
+    源码：
+        注册：
+            class AdminSite:
+                 def __init__(self, name="admin"):
+                    self._registry = {}
+                
+                def register(self, model_or_iterable, admin_class=None, **options):
+                    admin_class = admin_class or ModelAdmin
+
+                    self._registry[model] = admin_class(model, self)
+
+
+        设计url:
+            通过model类变量获取该模型的字符串名称和该模型所在app的名称
+            print(model._meta.model_name)
+            print(model._meta.app_label)
+            title = model._meta.get_field("title")
+            title.max_length
+
+            
+            def add(request):
+                return HttpResponse("add")
+
+
+            def delete(request, id):
+                return HttpResponse("delete")
+
+
+            def change(request, id):
+                return HttpResponse("change")
+
+
+            def search(request):
+                return HttpResponse("search")
+
+
+            def get_urls2():
+                temp = []
+                temp.append(path("add/", add))
+                temp.append(re_path("(\d+)/delete/", delete))
+                temp.append(re_path("(\d+)/change/", change))
+                temp.append(path("", search))
+
+                return temp
+
+
+            def get_urls():
+                temp = []
+                for model, admin_class_obj in admin.site._registry.items():
+                    model_name = model._meta.model_name
+                    app_label = model._meta.app_label
+                    temp.append(path(r"%s/%s/" % (app_label, model_name), (get_urls2(), None, None)))
+                return temp
+
+
+            urlpatterns = [
+                path('admin/', admin.site.urls),
+                path('service/', views.service),
+                path('index/', views.index),
+                path("yuan/", (get_urls(), None, None))
+]
+
+
+    stark
+        在ModelStark中，
+            self.model: 用户当前访问的模型表
+        
+        stark apps文件：
+            from django.apps import AppConfig
+            from django.utils.module_loading import autodiscover_modules
+
+
+            class StarkConfig(AppConfig):
+                name = 'stark'
+
+                def ready(self):
+                    autodiscover_modules('stark')
+
+        showlist类 处理视图：
+            filter  ---> list_filter  params.urlencode()返回数据
+                    如果查找和实际的id相同 渲染颜色
+                    判断每个field对象是否是多对多或一对多
+                    data_list = filter_field_obj.rel.to.objects.all()
+
+            get_header  函数参数 self.config, header=True
+
+            get_body  函数参数 self.config, obj   
+                        list_play存在__str__需要捕获异常
+                        判断field对象是否为多对多
+                        ret = getattr(obj, filed).all()
+                        判断field对象是否含有choices字段
+                            if field_obj.choices:
+                                val = getattr(obj, "get_"+filed+"_display")
+                        判断字段链接  渲染a标签url
+            
+            get_modelform_class  判断modelform_class 没有渲染默认
+
+            
+            pop   
+                如何在一对多和多对多字段后渲染+
+                +对应的跳转路径
+                保存添加记录同时，将原页面的对应的下拉菜单中添加记录
+
+     
+
