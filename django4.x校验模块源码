@@ -1,0 +1,37 @@
+django校验模块：django/core/checks/
+
+    compatibilty:
+        校验csrf白名单 CSRF_TRUSTED_ORIGINS
+        @register(Tags.compatibility) 
+        def check_csrf_trusted_origins(app_configs, **kwargs):
+            for origin in settings.CSRF_TRUSTED_ORIGINS:
+                pass
+
+    security:
+        base.py 定义错误信息对应编号  一些函数校验 正常返回[] 否则返回编号
+            @register(Tags.security, deploy=True)
+            def check_security_middleware(app_configs, **kwargs):
+                passed_check = _security_middleware()
+                return [] if passed_check else [W001]
+
+            W020 = Warning(
+            "ALLOWED_HOSTS must not be empty in deployment.",
+            id="security.W020",
+            )
+        
+    sessions.py   csrf.py 等同上
+
+
+    registry.py 文件：
+        # 全局对象  CheckRegistry对象
+        registry = CheckRegistry()
+        # 装饰器  属性
+        register = registry.register
+
+        初始化了两个集合  收集所有的注册函数
+        self.registered_checks = set()
+        self.deployment_checks = set()   装饰器参数deploy=True
+
+        register方法 将所有的函数注册到集合中
+        run_checks方法  运行所有函数
+        tag_exists  tags_available get_checks  方法判断被打标签的tag是否可用和存在，并获取所有注册函数集合的和
