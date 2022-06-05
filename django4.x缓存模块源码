@@ -1,0 +1,128 @@
+缓存模块： django/core/cache
+
+    __init__ 创建CacheHandler类   单例模式 caches = CacheHandler()
+        不传参默认用内存缓存    LocMemCache(BaseCache)
+        cache = ConnectionProxy(caches, DEFAULT_CACHE_ALIAS)
+
+        cache.get() = caches['default']  --> __getattr__() --> return getattr(self._connections[self._alias], item)
+
+        接着会调用CacheHandler父类的getitem方法(alias相当于Caches配置)
+        返回对应配置缓存类的对象 LocMemCache(BaseCache)
+
+            def __getitem__(self, alias):
+                try:
+                    return getattr(self._connections, alias)
+                except AttributeError:
+                    if alias not in self.settings:
+                        raise self.exception_class(f"The connection '{alias}' doesn't exist.")
+                conn = self.create_connection(alias)
+                setattr(self._connections, alias, conn)
+                return conn
+        
+    locmem.py LocMemCache类  默认类
+        初始化：
+             # self._cache保存缓存数据
+            self._cache = _caches.setdefault(name, OrderedDict())
+            # 保存key过期时间
+            self._expire_info = _expire_info.setdefault(name, {})
+            # 锁
+            self._lock = _locks.setdefault(name, Lock())
+
+        set:
+            设置缓存set方法  随机生成key，将缓存内容valpickle序列化  加锁设置
+            _set方法  缓存过量返回信息  否则将内容添加到self._cache中 放到尾端高优先级  设置过期时间
+
+            def _set(self, key, value, timeout=DEFAULT_TIMEOUT):
+            if len(self._cache) >= self._max_entries:
+                self._cull()
+            self._cache[key] = value
+            self._cache.move_to_end(key, last=False)
+            self._expire_info[key] = self.get_backend_timeout(timeout)
+
+            def set(self, key, value, timeout=DEFAULT_TIMEOUT, version=None):
+                key = self.make_and_validate_key(key, version=version)
+                pickled = pickle.dumps(value, self.pickle_protocol)
+                with self._lock:
+                    self._set(key, pickled, timeout)
+
+
+        get:
+            拿到key值，加锁，判断是否过期，根据self._expire_info 过期删除返回信息，
+            否则pickle反序列化返回内容 并将内容移到尾端高优先级
+
+            def get(self, key, default=None, version=None):
+                key = self.make_and_validate_key(key, version=version)
+                with self._lock:
+                    if self._has_expired(key):
+                        # 过期  删除key
+                        self._delete(key)
+                        return default
+                    # key没有过期 
+                    pickled = self._cache[key]
+                    self._cache.move_to_end(key, last=False)
+                return pickle.loads(pickled)
+
+    
+
+    redis.py  RedisCacheClient类：
+
+        初始化   servers  列表  写成url方式  ['redis://username:password @localhost:6379']
+                db = None      pool_class = None  CollectionPool类
+
+        self._client = self._lib.Redis  # redis.Redis类
+
+        注册pool对象 
+        if isinstance(pool_class, str):  # pool_class可以写成模块路径
+            pool_class = import_string(pool_class)
+        self._pool_class = pool_class or self._lib.ConnectionPool # 默认redis.ConnectionPool类
+
+
+        生成序列号 0表示主机  其他随机生成 表示从机  主从提高性能 write=True/False
+
+        def _get_connection_pool_index(self, write):
+            # 写服务或者只有一个服务  返回第一个redis 主机
+            if write or len(self._servers) == 1:
+                return 0
+            # write=False  读操作   返回其他  从机
+            return random.randint(1, len(self._servers) - 1)
+
+        将redisconnectionpool对象加到self._pool中
+        def _get_connection_pool(self, write):
+            index = self._get_connection_pool_index(write)
+            if index not in self._pools:
+                # 池内序号 对应redis服务connectionpool对象
+                self._pools[index] = self._pool_class.from_url(
+                    self._servers[index],
+                    **self._pool_options,
+                )
+            return self._pools[index]
+
+        返回redis链接对象client
+        def get_client(self, key=None, *, write=False):
+            # key is used so that the method signature remains the same and custom
+            # cache client can be implemented which might require the key to select
+            # the server, e.g. sharding.
+            pool = self._get_connection_pool(write)
+            # 返回redis服务的连接对象 Redis对象
+            return self._client(connection_pool=pool) # redis.Redis(connection_pool=pool)
+
+        所有方法类似  生成redis链接对象，调用redis内置方法 返回序列化内容
+        def get(self, key, default):
+            client = self.get_client(key)
+            value = client.get(key)
+            return default if value is None else self._serializer.loads(value)
+
+        
+        RedisCache(BaseCache)类：
+            初始化 self._class = RedisCacheClient
+
+            返回RedisCacheClient对象，即redis链接对象
+            @cached_property
+            def _cache(self):
+                # redisCache对象
+                return self._class(self._servers, **self._options)
+
+            所有方法类似  生成key  调用RedisCacheClient类的方法
+            def add(self, key, value, timeout=DEFAULT_TIMEOUT, version=None):
+                key = self.make_and_validate_key(key, version=version)
+                return self._cache.add(key, value, self.get_backend_timeout(timeout))
